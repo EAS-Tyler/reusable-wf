@@ -8,22 +8,16 @@ on:
         default: "."
         type: string
 
+# version locking
+
 permissions:
   contents: read
   security-events: write
   actions: read
 
-# // specify a directory to perform actions on
-# ommit .gihub? 
-
-
-#  reusable - ify it!!!!
-
-
 jobs:
   terraform-validate:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -34,44 +28,31 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-      # version lock!!
 
-      #         Formatting (cli) -  terraform fmt -check -recursive
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
-        continue-on-error: true 
+        continue-on-error: true
 
-      # ** run ‘terraform init -backend=false’ here - checks to follow require working directory **
       - name: Terraform Init
         id: init
         run: terraform init -backend=false
 
-      # Syntax (cli) - terraform validate
       - name: Terraform Validate
-        # id: validate
-        if: steps.init.outcome == 'success' 
+        if: steps.init.outcome == 'success'
         run: terraform validate
         continue-on-error: true
 
-      # Linting (cli & actions) - tflint -recursive (set up with gha action)
       - name: Setup TFLint
         if: steps.init.outcome == 'success'
-        uses: terraform-linters/setup-tflint@v4  
+        uses: terraform-linters/setup-tflint@v4
         # with:
         #   tflint_version: ${{ inputs.tflint-version }}
-
       - name: TFLint
-        # id: tflint
         if: steps.init.outcome == 'success'
         run: tflint --recursive
         continue-on-error: true
 
-      # Security (action) - checkov
-      # - name: Checkov
-      #   # id: checkov
-      #   # if: steps.init.outcome == 'success'
-      #   run: checkov -d .
-        # continue-on-error: true
+        # need to add directoy for actions
       - name: Checkov GitHub Action
         uses: bridgecrewio/checkov-action@v12
         continue-on-error: true
@@ -79,47 +60,38 @@ jobs:
           directory: module/
           output_format: cli,sarif
           output_file_path: console,results.sarif
-        
+
       # - name: Upload SARIF file
       #   uses: github/codeql-action/upload-sarif@v3
-    
+
       #   if: success() || failure()
       #   with:
       #     sarif_file: results.sarif
 
-
-        
-
-          # Ansible
   ansible-validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-
-# Formatting / Linting (gha action) - Ansible-lint
-      - name: Run ansible-lint
+      - name: Run ansible-lint (Formatting / Linting)
         uses: ansible/ansible-lint@main
         continue-on-error: true
         # # optional (see below):
-        # with:
-        #   args: ""
-        #   setup_python: "true"
-        #   working_directory: ""
+        with:
+          #   args: ""
+          #   setup_python: "true"
+          working_directory: "module"
         #   requirements_file: ""
-# https://github.com/marketplace/actions/run-ansible-lint
-
-# install ansible
-# do i need the syntax check? wont linter and vulnerability do this??
-# - name: Install Ansible
+      # https://github.com/marketplace/actions/run-ansible-lint
+      # install ansible
+      # do i need the syntax check? wont linter and vulnerability do this??
+      # - name: Install Ansible
       #   uses: ansible/ansible-action@v2
-
-# Syntax (cli) - ansible-playbook —syntax-check
+      # Syntax (cli) - ansible-playbook —syntax-check
       # - name: Ansible Syntax Check
-        # run: ansible-playbook --syntax-check
-
-# Security (gha action) - Ansible Vulnerability Scanner
+      # run: ansible-playbook --syntax-check
+      # Security (gha action) - Ansible Vulnerability Scanner
       - name: Run Vulnerability Scanner
         uses: j0rdan-m/ansible-vulnerability-scanner@v2.0.1
         # with:
