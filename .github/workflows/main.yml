@@ -8,7 +8,10 @@ on:
         default: "."
         type: string
 
-# version locking
+# version locking? redundant tests? e,g, do i need ansible-playbook syntax check with the ansible lintting?
+# pin verisons 
+
+# need to add directoy for actions
 
 permissions:
   contents: read
@@ -30,6 +33,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Format Check
+        id: fmt
         run: terraform fmt -check -recursive
         continue-on-error: true
 
@@ -39,64 +43,72 @@ jobs:
 
       - name: Terraform Validate
         if: steps.init.outcome == 'success'
+        id: validate
         run: terraform validate
         continue-on-error: true
 
-      - name: Setup TFLint
+      - name: TFLint - Setup
         if: steps.init.outcome == 'success'
-        uses: terraform-linters/setup-tflint@v4
-        # with:
-        #   tflint_version: ${{ inputs.tflint-version }}
-      - name: TFLint
+        uses: terraform-linters/setup-tflint@v3
+        
+      - name: TFLint - Run 
         if: steps.init.outcome == 'success'
+        id: tflint
         run: tflint --recursive
         continue-on-error: true
 
-        # need to add directoy for actions
       - name: Checkov GitHub Action
+        id: checkov
         uses: bridgecrewio/checkov-action@v12
         continue-on-error: true
         with:
-          directory: module/
-          output_format: cli,sarif
-          output_file_path: console,results.sarif
+          directory: ${{ inputs.working-directory }}
+          output_format: cli
+          output_file_path: console
 
-      # - name: Upload SARIF file
-      #   uses: github/codeql-action/upload-sarif@v3
-
-      #   if: success() || failure()
-      #   with:
-      #     sarif_file: results.sarif
+      - name: Check Terraform Job Status
+        if: always()
+        run: |
+          if [[ "${{ steps.fmt.outcome }}" == "failure" || \
+                "${{ steps.validate.outcome }}" == "failure" || \
+                "${{ steps.tflint.outcome }}" == "failure" || \
+                "${{ steps.checkov.outcome }}" == "failure" ]]; then
+            echo "One or more Terraform validation steps failed"
+            exit 1
+          fi
 
   ansible-validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Run ansible-lint (Formatting / Linting)
+        id: ansible-lint
         uses: ansible/ansible-lint@main
         continue-on-error: true
-        # # optional (see below):
         with:
           #   args: ""
           #   setup_python: "true"
-          working_directory: "module"
+          working_directory: ${{ inputs.working-directory }}
         #   requirements_file: ""
       # https://github.com/marketplace/actions/run-ansible-lint
-      # install ansible
-      # do i need the syntax check? wont linter and vulnerability do this??
-      # - name: Install Ansible
-      #   uses: ansible/ansible-action@v2
-      # Syntax (cli) - ansible-playbook —syntax-check
-      # - name: Ansible Syntax Check
-      # run: ansible-playbook --syntax-check
-      # Security (gha action) - Ansible Vulnerability Scanner
+      
+
       - name: Run Vulnerability Scanner
+        id: vulnerability-scan
         uses: j0rdan-m/ansible-vulnerability-scanner@v2.0.1
-        # with:
-        #   artifact_path: playbooks/
-        #   report_format: markdown
-        #   package_manager: pip,apt
-        #   cve_provider: nist
-        # https://github.com/marketplace/actions/ansible-vulnerability-scanner
+        continue-on-error: true
+                # https://github.com/marketplace/actions/ansible-vulnerability-scanner ---- working dir
+
+      - name: Check Ansible Job Status
+        if: always()
+        run: |
+          if [[ "${{ steps.ansible-lint.outcome }}" == "failure" || \
+                "${{ steps.vulnerability-scan.outcome }}" == "failure" ]]; then
+            echo "One or more Ansible validation steps failed"
+            exit 1
+          fi
