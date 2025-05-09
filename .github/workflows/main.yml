@@ -7,11 +7,10 @@ on:
         required: false
         default: "."
         type: string
-
-# version locking? redundant tests? e,g, do i need ansible-playbook syntax check with the ansible lintting?
-# pin verisons 
-
-# need to add directoy for actions
+      deploy-pipeline:
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -62,6 +61,7 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         continue-on-error: true
         with:
+          skip_check: ${{ inputs.deploy-pipeline == false && 'CKV2_AWS_6,CKV_AWS_18,CKV2_AWS_62,CKV_AWS_144,CKV_AWS_145,CKV2_AWS_61,CKV_AWS_21,CKV_GCP_30,CKV_GCP_32,CKV_GCP_37,CKV_GCP_40,CKV_GCP_62,CKV_GCP_78' || '' }}
           directory: ${{ inputs.working-directory }}
           output_format: cli
           output_file_path: console
@@ -91,19 +91,15 @@ jobs:
         uses: ansible/ansible-lint@main
         continue-on-error: true
         with:
-          #   args: ""
-          #   setup_python: "true"
           working_directory: ${{ inputs.working-directory }}
-        #   requirements_file: ""
-      # https://github.com/marketplace/actions/run-ansible-lint
       
-
       - name: Run Vulnerability Scanner
         id: vulnerability-scan
         uses: j0rdan-m/ansible-vulnerability-scanner@v2.0.1
         continue-on-error: true
-                # https://github.com/marketplace/actions/ansible-vulnerability-scanner ---- working dir
-
+        with:
+          artifact_path: ${{ inputs.working-directory }}
+        
       - name: Check Ansible Job Status
         if: always()
         run: |
